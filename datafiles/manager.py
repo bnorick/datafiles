@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import os
-from functools import reduce
+from functools import reduce, wraps
 from glob import iglob
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator, Optional
@@ -15,6 +15,7 @@ from parse import parse
 from ruamel.yaml.error import MarkedYAMLError
 
 from . import hooks
+from .errors import PatternNotSetError
 
 if TYPE_CHECKING:
     from .model import Model
@@ -29,10 +30,20 @@ class Splats:
         return "*"
 
 
+def ensure_pattern_set(fn):
+    @wraps(fn)
+    def wrapper(self: Manager, *args, **kwargs):
+        if self.model.Meta.datafile_pattern is None:
+            raise PatternNotSetError
+        return fn(self, *args, **kwargs)
+    return wrapper
+
+
 class Manager:
     def __init__(self, cls):
-        self.model = cls
+        self.model: Model = cls
 
+    @ensure_pattern_set
     def get(self, *args, **kwargs) -> Model:
         fields = dataclasses.fields(self.model)
         required = sum(1 for field in fields if isinstance(field.default, Missing))
@@ -52,6 +63,7 @@ class Manager:
 
         return instance
 
+    @ensure_pattern_set
     def get_or_none(self, *args, **kwargs) -> Optional[Model]:
         try:
             return self.get(*args, **kwargs)
@@ -59,6 +71,7 @@ class Manager:
             log.info("File not found")
             return None
 
+    @ensure_pattern_set
     def get_or_create(self, *args, **kwargs) -> Model:
         try:
             return self.get(*args, **kwargs)
@@ -69,6 +82,7 @@ class Manager:
             instance.datafile.load()
             return instance
 
+    @ensure_pattern_set
     def all(self, *, _exclude: str = "") -> Iterator[Model]:
         path = Path(self.model.Meta.datafile_pattern).expanduser()
         if path.is_absolute() or self.model.Meta.datafile_pattern[:2] == "./":
@@ -111,6 +125,7 @@ class Manager:
 
                 yield self.get(*values)
 
+    @ensure_pattern_set
     def filter(self, *, _exclude: str = "", **query):
         for item in self.all(_exclude=_exclude):
             match = True

@@ -1,4 +1,5 @@
 import dataclasses
+from functools import partial
 from pathlib import Path
 from typing import Callable, Dict, Optional, Union
 
@@ -7,8 +8,56 @@ from .converters import Converter
 from .model import create_model
 
 
+# def datafile(
+#     cls_or_pattern: Union[str, Callable, None] = None,
+#     *,
+#     attrs: Optional[Dict[str, Converter]] = None,
+#     manual: bool = Meta.datafile_manual,
+#     defaults: bool = Meta.datafile_defaults,
+#     infer: bool = Meta.datafile_infer,
+#     **kwargs,
+# ):
+#     """Synchronize a data class to the specified path.
+
+#     Supports the following decoration styles
+#     @datafile
+#     class Foo:
+#         bar: int
+
+#     @datafile("{self.bar}.toml")
+#     class Foo:
+#         bar: int
+#     """
+
+#     if cls_or_pattern is None:
+#         return partial(datafile, pattern=None, attrs=attrs, manual=manual, defaults=defaults, infer=infer, **kwargs)
+
+#     def helper(cls, pattern):
+#         if dataclasses.is_dataclass(cls):
+#             dataclass = cls
+#         else:
+#             dataclass = dataclasses.dataclass(cls)
+
+#         return create_model(
+#             dataclass,
+#             attrs=attrs,
+#             pattern=pattern,
+#             manual=manual,
+#             defaults=defaults,
+#             infer=infer,
+#         )
+
+#     is_pattern = isinstance(cls_or_pattern, str)
+#     if is_pattern:
+#         return partial(helper, pattern=cls_or_pattern)
+#     else:
+#         return helper(cls=cls_or_pattern, pattern=None)
+
+
 def datafile(
-    pattern: Union[str, Callable, None] = None,
+    cls=None,
+    *,
+    pattern: Optional[str] = None,
     attrs: Optional[Dict[str, Converter]] = None,
     manual: bool = Meta.datafile_manual,
     defaults: bool = Meta.datafile_defaults,
@@ -17,28 +66,22 @@ def datafile(
 ):
     """Synchronize a data class to the specified path."""
 
-    if pattern is None:
-        return dataclasses.dataclass(**kwargs)
+    if cls is None:
+        return partial(datafile, attrs=attrs, manual=manual, defaults=defaults, infer=infer, **kwargs)
 
-    if callable(pattern):
-        return dataclasses.dataclass(pattern)  # type: ignore
+    if dataclasses.is_dataclass(cls):
+        dataclass = cls
+    else:
+        dataclass = dataclasses.dataclass(cls)
 
-    def decorator(cls=None):
-        if dataclasses.is_dataclass(cls):
-            dataclass = cls
-        else:
-            dataclass = dataclasses.dataclass(cls)
-
-        return create_model(
-            dataclass,
-            attrs=attrs,
-            pattern=pattern,
-            manual=manual,
-            defaults=defaults,
-            infer=infer,
-        )
-
-    return decorator
+    return create_model(
+        dataclass,
+        attrs=attrs,
+        pattern=pattern,
+        manual=manual,
+        defaults=defaults,
+        infer=infer,
+    )
 
 
 def auto(filename: str, **kwargs):

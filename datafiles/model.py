@@ -4,9 +4,9 @@ import log
 from classproperties import classproperty
 
 from . import config, hooks, settings
+from .errors import PatternAlreadySetError, PatternNotSetError
 from .manager import Manager
 from .mapper import create_mapper
-
 
 class Model:
 
@@ -36,6 +36,16 @@ class Model:
                     hooks.apply(self, self.datafile)
 
         log.debug(f"Initialized {self.__class__} object")
+
+    @staticmethod
+    def _set_datafiles_pattern(cls: 'Model', pattern: str):
+        if cls.Meta.datafile_pattern is not None:
+            raise PatternAlreadySetError
+        cls.Meta.datafile_pattern = pattern
+
+    @classmethod
+    def set_datafiles_pattern(cls, pattern: str):
+        cls._set_datafiles_pattern(cls, pattern)
 
     @classproperty
     def objects(cls) -> Manager:  # pylint: disable=no-self-argument
@@ -78,11 +88,19 @@ def create_model(
     init = cls.__init__
 
     def modified_init(self, *args, **kwargs):
+        if settings.HOOKS_ENABLED and m.datafile_pattern is None:
+            raise PatternNotSetError
+
         with hooks.disabled():
             init(self, *args, **kwargs)
         Model.__post_init__(self)
 
     cls.__init__ = modified_init
     cls.__init__.__doc__ = init.__doc__
+
+    def set_datafiles_pattern(cls, pattern: str):
+        Model._set_datafiles_pattern(cls, pattern)
+
+    cls.set_datafiles_pattern = classmethod(set_datafiles_pattern)
 
     return cls

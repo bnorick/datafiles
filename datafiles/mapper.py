@@ -6,6 +6,7 @@ import dataclasses
 import inspect
 import os
 from contextlib import suppress
+from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -16,6 +17,27 @@ from . import config, formats, hooks
 from .converters import Converter, List, map_type, resolve
 from .types import Missing, Trilean
 from .utils import display, get_default_field_value, recursive_update, write
+
+
+def update_pattern_if_initialized(fn):
+    """Decorator which allows uninitialized path pattern to work.
+
+    When a mapper is created, the pattern may be uninitialized. If so,
+    the `Meta` attribute of underlying instance's type would have had a
+    value of `None` for the `datafile_pattern` attribute. Mapper function
+    calls ought to check if the pattern gets initialized in order to update
+    themselves and trigger an update on the `path` cached property.
+
+    Because the pattern may only be initialized once, we store the state of
+    initialization in _check_pattern_initialization so we can avoid this overhead
+    if/when the pattern is initialized.
+    """
+    @wraps(fn)
+    def wrapper(self: Mapper, *args, **kwargs):
+        if self._check_pattern_initialization:
+            self._update_pattern_if_initialized()
+        return fn(self, *args, **kwargs)
+    return wrapper
 
 
 class Mapper:
@@ -35,6 +57,7 @@ class Mapper:
         self._instance = instance
         self.attrs = attrs
         self._pattern = pattern
+        self._check_pattern_initialization = pattern is None
         self._manual = manual
         self.defaults = defaults
         self._infer = infer
@@ -45,6 +68,14 @@ class Mapper:
     @property
     def classname(self) -> str:
         return self._instance.__class__.__name__
+
+    def _update_pattern_if_initialized(self):
+        pattern = self._instance.Meta.datafile_pattern  # TODO(bnorick): typing?
+        if pattern:
+            self._pattern = pattern
+            # invalidate cached path, if any
+            self.__dict__.pop('path', None)
+            self._check_pattern_initialization = False
 
     @cached_property
     def path(self) -> Optional[Path]:
@@ -69,16 +100,19 @@ class Mapper:
         return path
 
     @property
+    @update_pattern_if_initialized
     def relpath(self) -> Path:
         return Path(os.path.relpath(self.path, Path.cwd()))
 
     @property
+    @update_pattern_if_initialized
     def exists(self) -> bool:
         if self.path:
             return self.path.exists()
         return False
 
     @property
+    @update_pattern_if_initialized
     def modified(self) -> bool:
         if self.path:
             return self._last_load != self.path.stat().st_mtime
@@ -148,10 +182,12 @@ class Mapper:
         return data
 
     @property
+    @update_pattern_if_initialized
     def text(self) -> str:
         return self._get_text()
 
     @text.setter
+    @update_pattern_if_initialized
     def text(self, value: str):
         write(self.path, value.strip() + "\n", display=True)
 
@@ -161,6 +197,7 @@ class Mapper:
             return formats.serialize(data, self.path.suffix)
         return formats.serialize(data)
 
+    @update_pattern_if_initialized
     def load(self, *, _log=True, _first_load=False) -> None:
         if self._root:
             self._root.load(_log=_log, _first_load=_first_load)
@@ -250,6 +287,7 @@ class Mapper:
         log.debug(f"Setting '{name}' value: {value!r}")
         setattr(instance, name, value)
 
+    @update_pattern_if_initialized
     def save(self, *, include_default_values: Trilean = None, _log=True) -> None:
         if self._root:
             self._root.save(include_default_values=include_default_values, _log=_log)
