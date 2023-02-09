@@ -57,7 +57,7 @@ class Mapper:
         self._instance = instance
         self.attrs = attrs
         self._pattern = pattern
-        self._check_pattern_initialization = pattern is None
+        self._check_pattern_initialization = pattern is None and hasattr(instance, 'Meta')
         self._manual = manual
         self.defaults = defaults
         self._infer = infer
@@ -70,7 +70,7 @@ class Mapper:
         return self._instance.__class__.__name__
 
     def _update_pattern_if_initialized(self):
-        pattern = self._instance.Meta.datafile_pattern  # TODO(bnorick): typing?
+        pattern = getattr(self._instance.Meta, 'datafile_pattern', None)
         if pattern:
             self._pattern = pattern
             # invalidate cached path, if any

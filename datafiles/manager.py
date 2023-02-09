@@ -33,7 +33,8 @@ class Splats:
 def ensure_pattern_set(fn):
     @wraps(fn)
     def wrapper(self: Manager, *args, **kwargs):
-        if self.model.Meta.datafile_pattern is None:
+        pattern = getattr(self.model.Meta, 'datafile_pattern', None)
+        if pattern is None:
             raise PatternNotSetError
         return fn(self, *args, **kwargs)
     return wrapper
