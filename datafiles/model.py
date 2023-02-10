@@ -15,7 +15,7 @@ class Model:
     def __post_init__(self):
         log.debug(f"Initializing {self.__class__} object")
 
-        self.datafile = create_mapper(self)
+        object.__setattr__(self, 'datafile', create_mapper(self))
 
         if settings.HOOKS_ENABLED:
             with hooks.disabled():

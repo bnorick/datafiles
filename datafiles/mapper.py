@@ -64,6 +64,7 @@ class Mapper:
         self._last_load = 0.0
         self._last_data: Dict = {}
         self._root = root
+        # self._first_load = True
 
     @property
     def classname(self) -> str:
@@ -199,6 +200,15 @@ class Mapper:
 
     @update_pattern_if_initialized
     def load(self, *, _log=True, _first_load=False) -> None:
+        #_first_load = self._first_load
+
+        if (
+            dataclasses.is_dataclass(self._instance)
+            and self._instance.__dataclass_params__.frozen
+            and not _first_load
+        ):
+            raise dataclasses.FrozenInstanceError('Cannot load frozen dataclass instances more than once.')
+
         if self._root:
             self._root.load(_log=_log, _first_load=_first_load)
             return
@@ -225,6 +235,7 @@ class Mapper:
             hooks.apply(self._instance, self)
 
         self.modified = False
+        # self._first_load = False
 
     @staticmethod
     def _infer_attr(name, value):
@@ -285,7 +296,7 @@ class Mapper:
             value = converter.to_python_value(file_value, target_object=init_value)
 
         log.debug(f"Setting '{name}' value: {value!r}")
-        setattr(instance, name, value)
+        object.__setattr__(instance, name, value)
 
     @update_pattern_if_initialized
     def save(self, *, include_default_values: Trilean = None, _log=True) -> None:

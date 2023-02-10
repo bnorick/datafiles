@@ -26,7 +26,12 @@ def datafile(
         class Foo:
             bar: int
 
-        # pattern arg with default kwargs
+        # no args, unknown kwargs => Foo becomes a dataclass with kwargs passed through
+        @datafile(frozen=True)
+        class Foo:
+            bar: int
+
+        # pattern arg with no kwargs
         @datafile("{self.bar}.toml")
         class Foo:
             bar: int
@@ -42,7 +47,13 @@ def datafile(
             bar: int
     """
     if cls_or_pattern is None:
-        return dataclasses.dataclass(**kwargs)
+        if (
+            attrs is None
+            and manual == Meta.datafile_manual
+            and defaults == Meta.datafile_defaults
+            and infer == Meta.datafile_infer
+        ):
+            return dataclasses.dataclass(**kwargs)
 
     if callable(cls_or_pattern):
         return dataclasses.dataclass(cls_or_pattern)  # type: ignore
@@ -51,7 +62,7 @@ def datafile(
         if dataclasses.is_dataclass(cls):
             dataclass = cls
         else:
-            dataclass = dataclasses.dataclass(cls)
+            dataclass = dataclasses.dataclass(cls, **kwargs)
 
         return create_model(
             dataclass,
@@ -65,6 +76,8 @@ def datafile(
     is_pattern = isinstance(cls_or_pattern, str)
     if is_pattern:
         return partial(helper, pattern=cls_or_pattern)
+    elif cls_or_pattern is None:
+        return partial(helper, pattern=None)
     else:
         return helper(cls=cls_or_pattern, pattern=None)
 
